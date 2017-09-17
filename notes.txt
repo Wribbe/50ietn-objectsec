@@ -1,0 +1,460 @@
+Object Security in Web of Things.
+---------------------------------
+
+  1. Introduction.
+  ----------------
+    - IoT held back due to protocol/technology fragmentation.
+    - Paper provides open standard for security and privacy on the application
+      data layer.
+    - Uses HTTP/CoAP + JSON -> Efficient RESTful services.
+
+  2. Background.
+  --------------
+    - Focus on constrained setting -> Efficiency even if not used in
+      constrained environment.
+    - Authorization and privacy important du to physical nature of IoT devices:
+      - Avoid leakage of users surrounding sensor.
+      - Actuators literally effect their surroundings.
+    - Most common approach currently (internet) -- Transport layer security
+      (TLS) + trust in the information storage. To inflexible and resource
+      dependent.
+
+  3. Base architecture.
+  ---------------------
+    - ACE (Authentication and authorization in Constrained Environments) (OAuth
+      based).
+    - Roles:
+      - Resource-sever - hosting resources.
+      - Client - party requesting access to resources.
+      - Resource-owner - owns resources in resource-server.
+      - Authorization-serve - acting on behalf of resource-owner / set policies.
+    - Protocol adaptations.
+      - Use CoAP/UDP instead of HTTP/TCP.
+      - Don't involve resource-owner in machine-to-machine settings. Utilize
+        authorization-server + policies instead.
+      - Reduce numbers of messages and their size.
+    - Enabling deployment of services between clients and resources:
+      - Services seen as:
+        - Client from point of resource-server.
+        - Resource server from point of client.
+      - Service modify / do operations on metadata, data or
+        data-representation.
+
+  4. Use cases and problem description.
+  -------------------------------------
+    - Not possible establish secure end-to-end connection -> cache data for
+      later while maintaining access-restrictions.
+    - Access to same resource with different client access-rights.
+      - Example, energy-meter:
+        - User -- Fine grained usage-data.
+        - Utility company -- Health rapport + overall usage.
+        - Other parties -- No access at all.
+    - Multiple end-points with same information, spread in time or access
+      levels.
+        - Example, publish-subscribe setting:
+          - Secure caching should be possible in nodes that don't have
+            authorization to read from the source.
+        - Example, configuration of many devices with intermittent
+          connectivity:
+          - Awoken device could request configuration settings from one of many
+            caches. Should be able to download from any -> verify configuration
+            -> configure.
+    - Requirements:
+      - Differentiate clients based on their access to resources.
+      - Should not be necessary to put trust in services to guarantee
+        information object confidentiality between sensors/actuators and
+        clients.
+      - Small and efficient representation and protocols.
+      - Support for caching.
+      - Based on open standards.
+
+  5. Object security.
+  -------------------
+    - Security on application layer.
+    - Secure object:
+      - Header + payload + integrity verification tag.
+      - Self-contained information container.
+      - Does not need to be associated with specific session.
+      - Information could be any of the following:
+        - Resource representation.
+        - Authorization information.
+        - Context information.
+    - Advantages:
+      - Multiple clients can be server the same object.
+      - Resource data protected at the source.
+      - Supports caching.
+    - If object format is well-designed, the same secure object format is
+      applicable for many different authorization levels -> easier to implement
+      compatible functionality in constrained device.
+    - Trust level on application layer is more flexible -> faster time to
+      market.
+    - Data representation and protection depends on type of data.
+    - Type of environment dictates need of using; symmetric or asymmetric keys,
+      confidentiality, integrity, replay-protection and which party has access
+      to which keys.
+
+  6. Example.
+  -----------
+    - JSOE + Channel security ((D)TLS).
+    - Hop-to-hop protection provided by TLS.
+    - Protection type -> effects:
+      - Channel protection (TLS) -> Protected hop-to-hop but
+        readable/modifiable by intermittent nodes, e.g. TLS metadata.
+      - Unencrypted with integrity protection -> Data can be read, but not
+        changed.
+      - Encryption without integrity protection -> Data can not be read, but
+        not possible to detect if there has been any changes.
+      - Encryption with integrity protection -> Data cannot be read and any
+        changes can be detected.
+    - Encryption and integrity protection on application layer enables services
+      to store, cache and filter contents based on unencrypted metadata,
+      without having access to the keys. This is not possible with
+      transport-layer protection.
+
+  7. Position and future work.
+  ----------------------------
+    - Current and new challenges can't be solved by transport layer security.
+      A more flexible solution is required to protect both privacy and
+      sensitive data.
+    - WC3 should develop:
+      - Object security standards for:
+        - JSON text data.
+        - Binary data and other compact legacy formats.
+        - Identifying encrypted information objects and binding meta-data to
+          them (JSON-LD).
+      - Protocols enabling secure multi-party exchange of:
+        - Information objects and their identities.
+        - Metadata.
+        - Identities of end-points.
+        - Key management.
+        - etc.
+      - Scalable syntax and semantics for policy formats.
+      - Debugging and management of large volumes of policy information.
+      - Specification for browser-based encryption/decryption and manipulation
+        of information objects.
+
+
+Perfect forward security.
+-------------------------
+  Feature of specific key agreement protocols that ensure that a unique key is
+  generated for every session the user initiates. This results in that in the
+  event of a session key is compromised, only the data that was protected with
+  that specific key is affected.
+
+  Enabled through the use of ephemeral Diffie-Hellman key exchange protocol.
+  This means that the client and server generate new Diffie-Hellman parameters
+  for each session. These parameters are never stored or re-used.
+
+
+Application layers security protocols for the internet of things.
+-----------------------------------------------------------------
+
+  - Possible security and safety challenges.
+  - Large variety of deployment settings, but many security objectives
+    identical. Possible to solve in the same manner.
+  - Current standards lagging.
+  - Paper introduces IoT-security suit providing lightweight protocols for
+    end-to-end security for HTTP-like operations for any transport + secure
+    group communications.
+
+  I. Introduction.
+  ----------------
+    - IoT -- interconnected devices.
+    - Daily interactions -> can't lock away, possible large impact.
+    - Large attack surface, ~20 billion devices by 2020.
+    - Current solutions more suitable for more powerful devices, think phones.
+    - Variety -> Split standards -> Larger cost / more errors. Uniformity ==
+      better.
+
+    - Common security:
+    ------------------
+      - Secure onboarding.
+      - Mutual authentication.
+      - Encrypted / Integrity protected communication.
+      - Secure group communication.
+      - Secure actuator commands.
+      - Protect against unauthorized access.
+
+    These are not met for embedded devices by current standards.
+    Focus of paper --> Security protocols for IoT devices.
+
+  II. Security for constrained environments.
+  ------------------------------------------
+    - CoAP (Constrained Application Protocol) -- HTTP for constrained
+      environments.
+      - Can be used with non-constrained devices as well.
+    - Does not sacrifice security, makes non-security trade-offs to adapt to
+      constrain environment.
+    - Example of constraints:
+    -------------------------
+      - Slow processing unit.
+      - Little amount of RAM.
+      - Battery powered.
+      - Power harvesting over decades.
+      - etc.
+    - Slow computation does generally not affect state-of-the art crypto
+      algorithms. (new often outperforms the old.)
+    - Power-consumption has direct implication on network architecture and
+      protocols:
+        - Can't communicate loads of information -> small and few messages.
+        - Idle / Intermittent connectivity - Not always reachable.
+        - Possible to lose non-permanent state - non-volatile storage
+          necessary. Prepare for state-restoration on restart and possible
+          attack vectors during boot / power-loss.
+        - Provide ways to signal freshness of information without accurate
+          clocks due to drift / no synchronization.
+
+  III. Design Objectives.
+  -----------------------
+
+    A. Security at what layer?
+    --------------------------
+      - Applied security at different layers -> different effect.
+        - At lower levels -> More of the stack protected but rigid.
+        - At higher levels -> Less protected, but less dependent on lower parts
+          of stack -> applicable to wider technologies.
+      - Possible to apply protocols to more than one layer, in practice
+        necessary to restrict number of security solutions due to efficiency.
+      * @Data link-layer:
+        + Early protection / rejection of packages, effective against DOS.
+        - Only protects one hop in the communication.
+      * @Transport-layer (TLS-DTLS):
+        + Messages protected through several hops / across several link layers.
+        - Encrypts metadata, URL, etc. -> can't be used / broken by proxies.
+      * @Above transport layer:
+        + Can be carried by different transport protocols; SMS,UDP,TCP etc.
+          with preserved integrity.
+        Flavours:
+        ---------
+          1.) Unprotected / Modifiable metadata with protected payload.
+            - If data that needs to be protected is in the payload -> good
+              protection.
+          2.) Both metadata and payload is protected.
+            - Possible to balance protection of metadata and usability by
+              proxies.
+
+    B. Other design principles.
+    ---------------------------
+      - Whenever possible, use optimized primitives such as CBOR, COSE, CoAP
+        for encoding, secure messaging formatting and messaging.
+      - Primitives should be reused to save code space.
+      - Limited protocol options reduces risk of errors together with protocol
+        -configuration and -implementation complexity.
+
+  IV. Existing technologies.
+  --------------------------
+    - Concise Binary Object Representation (CBOR):
+    ----------------------------------------------
+      - Binary format.
+      - Similar to JSON.
+      - Small code size.
+      - Compact serialization.
+      - Supports encoding/decoding of basic data types; strings, integers, etc.
+      - Supports encoding/decoding of byte-strings.
+      - Supports array and tree -structures.
+      - Self-describing, needs no schema description.
+      - Small CPU footprint for encoding / decoding.
+      - Small code-size footprint for encoding/decoding.
+
+    - Constrained Application Protocol (CoAP):
+    ------------------------------------------
+      - RESTful web protocol focused on machine-to-machine applications in
+        constrained environment.
+      - Provides subset of HTTP REST services + additional features:
+        - Discovery.
+        - Multicast-support.
+        - Asynchronous message exchange.
+      - Improved network performance through proxy caching. Also enables
+        communication with devices with intermittent connectivity.
+      - Small Message overhead.
+      - Low complexity when parsing.
+      - Designed for UDP but can run w/e.
+
+  V. Security protocols.
+  ----------------------
+    - CBOR Object Signing and Encryption (COSE):
+      - Provides basic secure wrapping of data for CBOR standard.
+      - Analogous to JSON Web -encryption / -signature.
+      - Describes how to create a secure COSE-object though using CBOR in
+        combination with:
+        - Creating and processing encrypted data.
+        - Signatures.
+        - Message Authentication Codes (MAC).
+
+    B. Object security of CoAP (OSCOAP)
+    -----------------------------------
+      - Defines secure CoAP communication between two clients in possible
+        presence of untrusted intermediates.
+      - High level: CoAP's sensitive parts protected with COSE -> secure
+        object. -> Secure object added to modified CoAP-message -> Sent.
+      - OSCOAP defines:
+        - Which parts of CoAP should be protected.
+        - Routines endpoints must execute to verify/create protected messages.
+      - Protection on two different layers possible:
+        - TLS over TCP -> All communications protected, needs trusted
+          intermediaries or has to skip functionality such as proxying.
+        - Datagram Transport Layer Security (DTLS) over UPD -> higher in the
+          stack, all communication is not protected, but more flexible.
+      - OSCOAP protects messages using authenticated encryption with additional
+        data (AEAD), in line with current security practices.
+      - End-points need to store security context; keys, initialization
+        vectors, etc.
+      - Two different keying material used for Request-Response transaction
+        protection.
+      - Uses sequence number for freshness / order of messages.
+?     - Provided binding between request and response enables increased
+        security and lower message overhead:
+          - Not possible to replay messages.
+  ?       - Only one bit has changed in keys/IVs -> no need for sequence number
+            in response.
+      - No need to re-establish security context if sudden RAM / power loss.
+        Combination of synchronized security state and intermittent use of
+        permanent storage.
+      - Possible to multicast with little to no modification to the COSE
+        wrapping due to all participants having a security association with all
+        other participants.
+      - Reduced implementation code-size due to not being bundled with default
+        key-exchange protocol.
+
+    C. Ephemeral Diffie-Hellman Over COSE (EDHOC)
+    ---------------------------------------------
+
+      Ephemeral Key (Wikipedia) --
+
+        A cryptographic key is called ephemeral if it is generated for each
+        execution of a key establishment process. In some cases ephemeral keys
+        are used more than once, within a single session (e.g., in broadcast
+        applications) where the sender generates only one ephemeral key pair
+        per message and the private key is combined separately with each
+        recipient's public key. Contrast with a static key.
+
+        Private ephemeral key agreement key: Private ephemeral key agreement
+        keys are the private keys of asymmetric key pairs that are used only
+        once to establish one or more keys (e.g., key wrapping keys, data
+        encryption keys, or MAC keys) and, optionally, other keying material
+        (e.g., Initialization Vectors).
+
+        Public ephemeral key agreement key: Public ephemeral key agreement keys
+        are the public keys of asymmetric key pairs that are used in a single
+        key establishment transaction to establish one or more keys (e.g., key
+        wrapping keys, data encryption keys, or MAC keys) and, optionally,
+        other keying material (e.g., Initialization Vectors).
+
+      - Constructed as a AEAD variant of SIGMA (SIGn-andMAc) protocol.
+      - Focuses on identity protection together with encrypting and protecting
+        as much other information as possible.
+      - Authentication based on out-of-band credentials, example, third-party,
+        e.g. ACE - authorization server.
+      - Supported authorization methods:
+        - "Raw" public keys.
+        - Certificates.
+        - Pre-shared keys.
+      - Messages encoded with CBOR and COSE with following design goals:
+        - Small message sizes.
+        - Small CPU resource footprint.
+        - Possible to use existing library-implementations of CBOR and COSE.
+      - Possible to use EDHOC with many different communication protocols due
+        to not having any requirements on the lower communication layers.
+      - Example of protecting application data by using AEAD algorithm
+        negotiated through EDHOC.
+      - Mitigates bidding-down attacks (mitm attacker removes strong encryption
+        choice from list) by possibility to verify that best common elliptic
+        curve is used.
+      - Establishing security context to be used OSCOAP is main use case.
+
+    D. The Authentication and Authorization in Constrained Environment
+       (ACE) Framework.
+    ------------------------------------------------------------------
+      - IoT dependent on fine-grained access control:
+        - Need-to-know basis.
+        - Need-to-change basis.
+        - Suitable for constrained end-points.
+      - OAuth 2.0 based.
+      - Constrained environment adaptations:
+        - Reduced message size and amount.
+        - Handle intermittent access by client and/or resource-server to e.g.
+          authorization servers.
+      - OAuth 2.0 changes:
+        - Proof-of-possession keys linked to both resource-sever and client
+          access tokens. In case of one being offline, the other is used as
+          intermediary.
+        - Authentication server specifies required communication profile that
+          must be used by both client and resource-server.
+        - Resource-server establishes a resource where the client can send its
+          access token.
+        - Reduced message size by encoding with CBOR instead of JSON.
+      - Normal OAuth token-flow involves manual intervention from
+        resource-owner. ACE focuses on establishing a flow where the resource
+        owner can configure what access can be granted by the authentication
+        server to a requesting client through the clients own credentials
+        without involving the resource owner.
+
+    Profiles of the ACE Framework:
+    ------------------------------
+      - Profiles define communication and communication security protocol that
+        should be used between client and resource-server.
+      - Profiles also define how authentication and proof-of-possession of
+        access tokens are performed.
+
+    E. Security for Actuators
+    -------------------------
+      - Autonomous cyber-physical systems -> integrity + reliability >
+        confidentiality.
+      - No proximity check for touch-pay, access-cards, cars etc. e.g. cars ->
+        relay unlock signal -> steal.
+      - Challenge - response with timestamps to avoid delaying e.g. an unlock
+        command to a interconnected lock.
+
+  VI. Applications
+  ----------------
+
+    A. Device joining a network.
+    ----------------------------
+      - Authentication:
+        - Joining nodes talk to the join-coordinator node through
+          join-assistants (secure application layer communication -> secure
+          end-to-end between joining and coordinator through intermediaries).
+      - Joining:
+        - Simple Join.
+          - Optional security handshake.
+          - OSCOAP message containing protected join request and join response.
+            The response carrier key and configuration data needed to connect
+            to devices on the network.
+        - Simple Enrollment.
+          - Optional OSCOAP key-establishment.
+          - OSCOAP message exchange:
+            - Client -> Certificate Signing Request.
+            - Public Key Certificate <- Authenticator. Which can be used to
+              prove membership.
+
+
+    B. Lighting control.
+    --------------------
+      - Possible setup: Broadcaster -> Multiple listeners.
+      - Group manager:
+        - Authorizes members of group to preform specific tasks.
+        - Mediate keys that protect communication between group members.
+
+Problem description -- Object security:
+---------------------------------------
+
+  Goals:
+  ------
+    - Understand main security properties of a secure channel and how to
+      implement them.
+    - Grasp the specific nature of using object security to establish a secure
+      connection.
+    - Forward security - understand the concept and how to implement it.
+
+  Instructions:
+  -------------
+    Implement a proof-of-concept secure connection for two parties that
+    fulfills the following:
+      1.) Utilizes the principle of object security.
+      2.) Provide integrity, confidentiality and protect against replays.
+      3.) Use UDP for data exchange.
+      4.) Utilize forward security.
+      5.) Be composed of two distinct phases, handshake + protected data
+          exchange.
+      6.) Actually works when tested.
+      7.) Provide documentation for design choices in the implementation.
