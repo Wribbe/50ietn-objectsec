@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
 import random
+import socket
+import sys
+
+PORT = 12000
+HOST = ''
+SIZE_DATA = 1024
 
 """
 Proof-of-concept secure end-to-end communication using object security.
@@ -52,8 +58,37 @@ def super_secret_primes():
 def generate_public_number():
     return random.integer(1,1e4)
 
-def main():
-    print(super_secret_primes())
+def server():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.bind((HOST, PORT))
+        print("Starting server on port {}, listening on UDP.".format(PORT))
+        while True:
+            try:
+                message, address = s.recvfrom(SIZE_DATA)
+                s.sendto(message, address)
+            except KeyboardInterrupt as e:
+                print("\nKeyboard interrupt received, closing down.")
+                break
+
+def client():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        message = b"HELLO WORLD!"
+        address = ("127.0.0.1", PORT)
+
+        s.sendto(message, address)
+        data, server = s.recvfrom(SIZE_DATA)
+        print("Data received: {}".format(str(data)))
+
+def main(args):
+    usage = "Usage: [python] {} --client/--server"
+    if "--client" in args:
+        client()
+    elif "--server" in args:
+        server()
+    else:
+        print(usage.format(__file__))
+
+    #print(super_secret_primes())
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
