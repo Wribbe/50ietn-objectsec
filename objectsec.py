@@ -16,6 +16,17 @@ Crypto library used: PyCrypto.
           5.) Be composed of two distinct phases, handshake + protected data
               exchange.
           6.) Actually works when tested.
-          7.) provide documentation for design choices in the implementation.
+          7.) Provide documentation for design choices in the implementation.
 
     Solutions:
+    ----------
+        1 : Security on application layer.
+        2 : - Integrity - MAC.
+            - Confidentiality - Encryption.
+            - Replay - Sequence number for freshness.
+        3 : Use UDP.
+        4 : Use ephemeral keys for each session.
+        5 : Use two distinct phases.
+        6 : Make sure it works.
+        7 : Document it.
+"""
