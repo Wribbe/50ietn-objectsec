@@ -8,6 +8,12 @@ PORT = 12000
 HOST = ''
 SIZE_DATA = 1024
 
+TYPE_INITIATE = "INITIATE"
+TYPE_ANSWER = "ANSWER"
+
+CMD_SHAKE = b"SHAKE"
+DELIM_DATA = ','
+
 """
 Proof-of-concept secure end-to-end communication using object security.
 
@@ -40,23 +46,48 @@ Crypto library used: PyCrypto.
         7 : Document it.
 """
 
-def super_secret_primes():
-    """ Use sieve of Eratosthenes to generate all primes up to 10000. """
-    primes_up_to = 1e5
-    marked = [False]*primes_up_to
-    primes = [1]
-    for n in range(2,primes_up_to):
-        if marked[n]:
-            continue
-        primes.append(n)
-        mul_index = n
-        while mul_index < primes_up_to-1:
-            marked[mul_index] = True
-            mul_index += n
-    return primes
 
 def generate_public_number():
-    return random.integer(1,1e4)
+    """ Return public number for Diffie-Hellman. """
+    return random.randint(1,1e4)
+
+
+def generate_private_number():
+    """ Return secret number for Diffie-Hellman. """
+
+    def super_secret_primes():
+        """ Use sieve of Eratosthenes to generate all primes up to 10000. """
+        primes_up_to = int(1e5)
+        marked = [False]*primes_up_to
+        primes = [1]
+        for n in range(2,primes_up_to):
+            if marked[n]:
+                continue
+            primes.append(n)
+            mul_index = n
+            while mul_index < primes_up_to-1:
+                marked[mul_index] = True
+                mul_index += n
+        return primes
+
+    return random.choice(super_secret_primes())
+
+def handshake(shake_type, socket, address):
+    """ Handshake routine with different types, used for key-exchange:
+        - Initiate -- Send public numbers n, g and g^x mod n to client(s),
+                      return own secret x.
+        - Answer -- Send computation g^y mod n back.
+    """
+    if shake_type == TYPE_INITIATE:
+        n = generate_public_number()
+        g = generate_public_number()
+        x = generate_private_number()
+        g_raised_to_x_mod_n = g**x % n
+        response = ",".join([str(x) for x in [n, g, g_raised_to_x_mod_n]])
+        socket.sendto(bytes(response, 'utf-8'), address)
+        print("Sending n: {}, g: {}, g^mod n: {}".format(n, g,
+            g_raised_to_x_mod_n))
+        return x
 
 def server():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -65,19 +96,25 @@ def server():
         while True:
             try:
                 message, address = s.recvfrom(SIZE_DATA)
-                s.sendto(message, address)
+                if message == CMD_SHAKE:
+                    my_secret = handshake(TYPE_INITIATE, s, address)
             except KeyboardInterrupt as e:
                 print("\nKeyboard interrupt received, closing down.")
                 break
 
-def client():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        message = b"HELLO WORLD!"
-        address = ("127.0.0.1", PORT)
 
-        s.sendto(message, address)
+def client():
+
+    address = ("127.0.0.1", PORT)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        "Initiate handshake."
+        s.sendto(CMD_SHAKE, address)
         data, server = s.recvfrom(SIZE_DATA)
-        print("Data received: {}".format(str(data)))
+        n, g, g_raised_to_x_mod_n = [int(num.strip()) for num in
+                data.decode('utf-8').split(DELIM_DATA)]
+        print("Received n: {}, g: {}, g^x mod n: {}".format(n, g, g_raised_to_x_mod_n))
+
 
 def main(args):
     usage = "Usage: [python] {} --client/--server"
@@ -88,7 +125,6 @@ def main(args):
     else:
         print(usage.format(__file__))
 
-    #print(super_secret_primes())
 
 if __name__ == "__main__":
     main(sys.argv[1:])
