@@ -138,8 +138,7 @@ def client():
     address = ("127.0.0.1", PORT)
     shared_rsa_secret = ""
 
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-
+    def handshake(address):
         "Initiate handshake."
         send_data(s, CMD_SHAKE, address)
         data_tokens, server = get_data(s)
@@ -152,8 +151,11 @@ def client():
         send_data(s, [CMD_SHARED,g_raised_to_b_mod_p], server)
         # Calculate shared secret.
         shared_rsa_secret = g_raised_to_a_mod_p**b % p
-        print("Computed shared secret: {}".format(shared_rsa_secret))
+        return shared_rsa_secret
 
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        shared_rsa_secret = handshake(address)
+        print("Computed shared secret: {}".format(shared_rsa_secret))
 
 
 
