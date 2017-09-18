@@ -87,6 +87,27 @@ def handshake(shake_type, socket, address):
         print("Keeping {} as own secret.".format(a))
         return p, g, g_raised_to_a_mod_p, a
 
+def send_data(socket, data, address):
+    if type(data) != list:
+        data = [data]
+    data = [str(item) for item in data]
+    data = bytes(",".join(data), ENCODING)
+    socket.sendto(data, address)
+
+def get_data(socket):
+    data, sender = socket.recvfrom(SIZE_DATA)
+    str_data = data.decode(ENCODING)
+    str_tokens = [token.strip() for token in str_data.split(DELIM_DATA)]
+    return str_tokens, sender
+
+def calculate_shared_secret(computed_primitive, own_secret, public_mod):
+    secret_length = 16
+    shared_secret = computed_primitive**own_secret % public_mod
+    # Make sure it has length secret_length, concatenate as string and slice.
+    shared_secret = (str(shared_secret)*10)[:secret_length]
+    # Convert back to bytes and return.
+    return bytes(shared_secret, ENCODING)
+
 def server():
 
     p = ""
@@ -96,42 +117,30 @@ def server():
 
     shared_rsa_secret = ""
 
+    def parse_commands():
+        global p, g, a, g_raised_to_a_mod_p
+        tokens, address = get_data(s)
+        command = tokens.pop(0)
+        if command == CMD_SHAKE:
+            # Get primitives.
+            primitives = handshake(TYPE_INITIATE, s, address)
+            # Unpack primitives.
+            p, g, g_raised_to_a_mod_p, a = primitives
+        elif command == CMD_SHARED:
+            g_raised_to_b_mod_p = int(tokens[0])
+            shared_rsa_secret = calculate_shared_secret(g_raised_to_b_mod_p, a,
+                    p)
+            print("Have the shared secret: {}".format(shared_rsa_secret))
+
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.bind((HOST, PORT))
         print("Starting server on port {}, listening on UDP.".format(PORT))
         while True:
             try:
-                tokens, address = get_data(s)
-                command = tokens.pop(0)
-                if command == CMD_SHAKE:
-                    # Get primitives.
-                    primitives = handshake(TYPE_INITIATE, s, address)
-                    # Unpack primitives.
-                    p, g, g_raised_to_a_mod_p, a = primitives
-                elif command == CMD_SHARED:
-                    g_raised_to_b_mod_p = int(tokens[0])
-                    shared_rsa_secret = g_raised_to_b_mod_p**a % p
-                    print("Have the shared secret:"+\
-                          " {}".format(shared_rsa_secret))
-
+                parse_commands()
             except KeyboardInterrupt as e:
                 print("\nKeyboard interrupt received, closing down.")
                 break
-
-def send_data(socket, data, address):
-    if type(data) != list:
-        data = [data]
-    data = [str(item) for item in data]
-    data = bytes(",".join(data), ENCODING)
-    socket.sendto(data, address)
-
-
-def get_data(socket):
-    data, sender = socket.recvfrom(SIZE_DATA)
-    str_data = data.decode(ENCODING)
-    str_tokens = [token.strip() for token in str_data.split(DELIM_DATA)]
-    return str_tokens, sender
-
 
 def client():
 
@@ -144,13 +153,14 @@ def client():
         data_tokens, server = get_data(s)
         # Get Diffie-Hellman primitives from server.
         p, g, g_raised_to_a_mod_p = [int(token) for token in data_tokens]
-        print("Received p: {}, g: {}, g^a mod p: {}".format(p, g, g_raised_to_a_mod_p))
+        print("Received p: {}, g: {}, g^a mod p: {}".format(p, g,
+            g_raised_to_a_mod_p))
         b = get_prime() # Client private key.
         g_raised_to_b_mod_p = g**b % p
         # Send computed intermediary to server.
         send_data(s, [CMD_SHARED,g_raised_to_b_mod_p], server)
         # Calculate shared secret.
-        shared_rsa_secret = g_raised_to_a_mod_p**b % p
+        shared_rsa_secret = calculate_shared_secret(g_raised_to_a_mod_p, b, p)
         return shared_rsa_secret
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
