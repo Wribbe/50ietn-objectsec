@@ -85,9 +85,17 @@ def handshake(shake_type, socket, address):
         print("Sending p: {}, g: {}, g^mod p: {}".format(p, g,
             g_raised_to_a_mod_p))
         print("Keeping {} as own secret.".format(a))
-        return a
+        return p, g, g_raised_to_a_mod_p, a
 
 def server():
+
+    p = ""
+    g = ""
+    a = ""
+    g_raised_to_a_mod_p = ""
+
+    shared_rsa_secret = ""
+
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.bind((HOST, PORT))
         print("Starting server on port {}, listening on UDP.".format(PORT))
@@ -96,9 +104,16 @@ def server():
                 tokens, address = get_data(s)
                 command = tokens.pop(0)
                 if command == CMD_SHAKE:
-                    my_secret = handshake(TYPE_INITIATE, s, address)
+                    # Get primitives.
+                    primitives = handshake(TYPE_INITIATE, s, address)
+                    # Unpack primitives.
+                    p, g, g_raised_to_a_mod_p, a = primitives
                 elif command == CMD_SHARED:
-                    print("SHARE")
+                    g_raised_to_b_mod_p = int(tokens[0])
+                    shared_rsa_secret = g_raised_to_b_mod_p**a % p
+                    print("Have the shared secret:"+\
+                          " {}".format(shared_rsa_secret))
+
             except KeyboardInterrupt as e:
                 print("\nKeyboard interrupt received, closing down.")
                 break
@@ -135,13 +150,9 @@ def client():
         g_raised_to_b_mod_p = g**b % p
         # Send computed intermediary to server.
         send_data(s, [CMD_SHARED,g_raised_to_b_mod_p], server)
-        # Receive computed intermediary from server.
-        data, server = s.recvfrom(SIZE_DATA)
-        command, value = get_data(s)
-        if command == CMD_SHARED:
-            shared_rsa_secret = int(value)**b % p
-        print("Received {} from sever, computed shared secret: {}".format(
-            shared_rsa_secret))
+        # Calculate shared secret.
+        shared_rsa_secret = g_raised_to_a_mod_p**b % p
+        print("Computed shared secret: {}".format(shared_rsa_secret))
 
 
 
