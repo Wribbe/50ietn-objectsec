@@ -4,6 +4,9 @@ import random
 import socket
 import sys
 
+from Crypto.Cipher import AES
+from Crypto import Random
+
 PORT = 12000
 HOST = ''
 SIZE_DATA = 1024
@@ -87,18 +90,37 @@ def handshake(shake_type, socket, address):
         print("Keeping {} as own secret.".format(a))
         return p, g, g_raised_to_a_mod_p, a
 
-def send_data(socket, data, address):
+def send_data(socket, data, address, key=""):
     if type(data) != list:
         data = [data]
     data = [str(item) for item in data]
     data = bytes(",".join(data), ENCODING)
+    if key:
+        data = encrypt(key, data)
+        print("Sending encrypted data:", data)
     socket.sendto(data, address)
 
-def get_data(socket):
+def get_data(socket, key=""):
     data, sender = socket.recvfrom(SIZE_DATA)
+    if key:
+        print("Received encrypted data:", data)
+        data = decrypt(key, data)
     str_data = data.decode(ENCODING)
     str_tokens = [token.strip() for token in str_data.split(DELIM_DATA)]
     return str_tokens, sender
+
+def encrypt(key, message):
+    iv = Random.new().read(AES.block_size)
+    cipher = AES.new(key, AES.MODE_CFB, iv)
+    return iv + cipher.encrypt(message)
+
+def decrypt(key, message):
+    block_size = AES.block_size
+    iv = message[:block_size]
+    message = message[block_size:]
+
+    cipher = AES.new(key, AES.MODE_CFB, iv)
+    return cipher.decrypt(message)
 
 def calculate_shared_secret(computed_primitive, own_secret, public_mod):
     secret_length = 16
@@ -114,23 +136,29 @@ def server():
     g = ""
     a = ""
     g_raised_to_a_mod_p = ""
-
     shared_rsa_secret = ""
 
     def parse_commands():
-        global p, g, a, g_raised_to_a_mod_p
-        tokens, address = get_data(s)
-        command = tokens.pop(0)
+        nonlocal p, g, a, g_raised_to_a_mod_p, shared_rsa_secret
+        tokens, address = get_data(s, key=shared_rsa_secret)
+        command = tokens[0]
         if command == CMD_SHAKE:
+            # Remove command.
+            tokens.pop(0)
             # Get primitives.
             primitives = handshake(TYPE_INITIATE, s, address)
             # Unpack primitives.
             p, g, g_raised_to_a_mod_p, a = primitives
         elif command == CMD_SHARED:
+            # Remove command.
+            tokens.pop(0)
             g_raised_to_b_mod_p = int(tokens[0])
             shared_rsa_secret = calculate_shared_secret(g_raised_to_b_mod_p, a,
                     p)
             print("Have the shared secret: {}".format(shared_rsa_secret))
+        else: # Message.
+            print("Got message: {}".format(tokens))
+
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.bind((HOST, PORT))
@@ -166,7 +194,9 @@ def client():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         shared_rsa_secret = handshake(address)
         print("Computed shared secret: {}".format(shared_rsa_secret))
-
+        message_plaintext = "This is an encrypted message."
+        print("Massage plain-text:", message_plaintext)
+        send_data(s, message_plaintext, address, shared_rsa_secret)
 
 
 def main(args):
