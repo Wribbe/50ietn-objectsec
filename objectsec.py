@@ -11,8 +11,12 @@ SIZE_DATA = 1024
 TYPE_INITIATE = "INITIATE"
 TYPE_ANSWER = "ANSWER"
 
-CMD_SHAKE = b"SHAKE"
+CMD_SHAKE = "SHAKE"
+CMD_SHARED = "SHARED"
+
 DELIM_DATA = ','
+ENCODING='utf-8'
+
 
 """
 Proof-of-concept secure end-to-end communication using object security.
@@ -46,13 +50,7 @@ Crypto library used: PyCrypto.
         7 : Document it.
 """
 
-
-def generate_public_number():
-    """ Return public number for Diffie-Hellman. """
-    return random.randint(1,1e4)
-
-
-def generate_private_number():
+def get_prime():
     """ Return secret number for Diffie-Hellman. """
 
     def super_secret_primes():
@@ -74,20 +72,20 @@ def generate_private_number():
 
 def handshake(shake_type, socket, address):
     """ Handshake routine with different types, used for key-exchange:
-        - Initiate -- Send public numbers n, g and g^x mod n to client(s),
-                      return own secret x.
-        - Answer -- Send computation g^y mod n back.
+        - Initiate -- Send public numbers p, g and g^a mod p to client(s),
+                      return own secret a.
+        - Answer -- Send computation g^y mod p back.
     """
     if shake_type == TYPE_INITIATE:
-        n = generate_public_number()
-        g = generate_public_number()
-        x = generate_private_number()
-        g_raised_to_x_mod_n = g**x % n
-        response = ",".join([str(x) for x in [n, g, g_raised_to_x_mod_n]])
-        socket.sendto(bytes(response, 'utf-8'), address)
-        print("Sending n: {}, g: {}, g^mod n: {}".format(n, g,
-            g_raised_to_x_mod_n))
-        return x
+        p = get_prime() # Public (prime) modulus.
+        g = get_prime() # Public (prime) base.
+        a = get_prime() # Server private key.
+        g_raised_to_a_mod_p = g**a % p
+        send_data(socket, [p, g, g_raised_to_a_mod_p], address)
+        print("Sending p: {}, g: {}, g^mod p: {}".format(p, g,
+            g_raised_to_a_mod_p))
+        print("Keeping {} as own secret.".format(a))
+        return a
 
 def server():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -95,25 +93,57 @@ def server():
         print("Starting server on port {}, listening on UDP.".format(PORT))
         while True:
             try:
-                message, address = s.recvfrom(SIZE_DATA)
-                if message == CMD_SHAKE:
+                tokens, address = get_data(s)
+                command = tokens.pop(0)
+                if command == CMD_SHAKE:
                     my_secret = handshake(TYPE_INITIATE, s, address)
+                elif command == CMD_SHARED:
+                    print("SHARE")
             except KeyboardInterrupt as e:
                 print("\nKeyboard interrupt received, closing down.")
                 break
+
+def send_data(socket, data, address):
+    if type(data) != list:
+        data = [data]
+    data = [str(item) for item in data]
+    data = bytes(",".join(data), ENCODING)
+    socket.sendto(data, address)
+
+
+def get_data(socket):
+    data, sender = socket.recvfrom(SIZE_DATA)
+    str_data = data.decode(ENCODING)
+    str_tokens = [token.strip() for token in str_data.split(DELIM_DATA)]
+    return str_tokens, sender
 
 
 def client():
 
     address = ("127.0.0.1", PORT)
+    shared_rsa_secret = ""
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+
         "Initiate handshake."
-        s.sendto(CMD_SHAKE, address)
+        send_data(s, CMD_SHAKE, address)
+        data_tokens, server = get_data(s)
+        # Get Diffie-Hellman primitives from server.
+        p, g, g_raised_to_a_mod_p = [int(token) for token in data_tokens]
+        print("Received p: {}, g: {}, g^a mod p: {}".format(p, g, g_raised_to_a_mod_p))
+        b = get_prime() # Client private key.
+        g_raised_to_b_mod_p = g**b % p
+        # Send computed intermediary to server.
+        send_data(s, [CMD_SHARED,g_raised_to_b_mod_p], server)
+        # Receive computed intermediary from server.
         data, server = s.recvfrom(SIZE_DATA)
-        n, g, g_raised_to_x_mod_n = [int(num.strip()) for num in
-                data.decode('utf-8').split(DELIM_DATA)]
-        print("Received n: {}, g: {}, g^x mod n: {}".format(n, g, g_raised_to_x_mod_n))
+        command, value = get_data(s)
+        if command == CMD_SHARED:
+            shared_rsa_secret = int(value)**b % p
+        print("Received {} from sever, computed shared secret: {}".format(
+            shared_rsa_secret))
+
+
 
 
 def main(args):
