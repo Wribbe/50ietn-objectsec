@@ -19,6 +19,8 @@ CMD_SHARED = "SHARED"
 DELIM_DATA = '!,!'
 ENCODING='utf-8'
 
+SEQUENCE_NUMBER = 0
+
 """
 Proof-of-concept secure end-to-end communication using object security.
 
@@ -50,7 +52,6 @@ Crypto library used: PyCrypto.
         6 : Make sure it works.
         7 : Document it.
 """
-
 def get_prime():
     """ Return secret number for Diffie-Hellman. """
 
@@ -71,11 +72,20 @@ def get_prime():
 
     return random.choice(super_secret_primes())
 
-def send_data(socket, data, address, key="", poison="",
-        poison_message=False):
+def send_data(socket, data, address, key="", poison="", seq=""):
+    global SEQUENCE_NUMBER
+
     if type(data) != list:
         data = [data]
     data = [str(item) for item in data]
+
+    # Add and increment sequence number.
+    if seq:
+        data = [str(seq)] + data
+    else:
+        data = [str(SEQUENCE_NUMBER)] + data
+        SEQUENCE_NUMBER += 1
+
     if key:
         # Generate MAC and prefix to data.
         mac = generate_mac(key, data)
@@ -93,15 +103,19 @@ def send_data(socket, data, address, key="", poison="",
         if poison == "DATA_ENCRYPTED":
             # Remove last encrypted token.
             data = data[:len(data)-1]
+
     socket.sendto(data, address)
 
 def get_data(socket, key=""):
+    global SEQUENCE_NUMBER
     data, sender = socket.recvfrom(SIZE_DATA)
     if key:
         print("Received encrypted data:", data)
         data = decrypt(key, data)
     str_data = data.decode(ENCODING)
     str_tokens = [token.strip() for token in str_data.split(DELIM_DATA)]
+
+    MAC_OK = True
     if key:
         print("Checking MAC..")
         recieved_mac = str_tokens.pop(0)
@@ -109,7 +123,21 @@ def get_data(socket, key=""):
         if recieved_mac == calculated_mac:
             print("MAC checks out, integrity of data is ok!")
         else:
+            MAC_OK = False
             print("MAC did not match, integrity of data can not be verified!")
+
+    if MAC_OK:
+        recv_sequence_number = int(str_tokens.pop(0))
+        seq_error = "Wrong sequence number! Was: {}, expected: {}."
+        if recv_sequence_number < SEQUENCE_NUMBER:
+            print(seq_error.format(recv_sequence_number, SEQUENCE_NUMBER))
+        else:
+            print("Received number: {} >= {}.".format(recv_sequence_number,
+                SEQUENCE_NUMBER))
+            SEQUENCE_NUMBER = recv_sequence_number + 1
+            print("Next sequence number should be:", SEQUENCE_NUMBER)
+    else:
+        print("Can not verify integrity of message, not checking seq-number.")
     return str_tokens, sender
 
 def encrypt(key, message):
@@ -193,6 +221,7 @@ def server():
                 break
 
 def client():
+    global SEQUENCE_NUMBER
 
     address = ("127.0.0.1", PORT)
     shared_rsa_secret = ""
@@ -239,6 +268,25 @@ def client():
         print("Sending ok message with ok MAC:", message_poisoned_encryption)
         send_data(s, message_poisoned_encryption, address, shared_rsa_secret,
                 poison="DATA_ENCRYPTED")
+        print()
+
+        message_correct_seq_after_failures = "No failures resets seq#."
+        print("Sending:", message_correct_seq_after_failures)
+        send_data(s, message_correct_seq_after_failures, address,
+                shared_rsa_secret)
+        print()
+
+        message_to_low_seq_num = "Message with to low seq#."
+        print("Sending:", message_to_low_seq_num)
+        send_data(s, message_to_low_seq_num, address, shared_rsa_secret,
+                seq=-1)
+        print()
+
+        # "Simulate" 200 messages lost.
+        SEQUENCE_NUMBER += 200
+        message_new_seq_after_lost = "Message after 200 lost."
+        print("Sending:", message_new_seq_after_lost)
+        send_data(s, message_new_seq_after_lost, address, shared_rsa_secret)
         print()
 
 def main(args):
