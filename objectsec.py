@@ -16,7 +16,7 @@ SIZE_DATA = 1024
 CMD_SHAKE = "SHAKE"
 CMD_SHARED = "SHARED"
 
-DELIM_DATA = ','
+DELIM_DATA = '!,!'
 ENCODING='utf-8'
 
 """
@@ -85,7 +85,9 @@ def send_data(socket, data, address, key="", poison="",
             data[0] = data[0][1:]
         # Prepend MAC to data.
         data = [mac] + data
-    data = bytes(",".join(data), ENCODING)
+
+    data = bytes(DELIM_DATA.join(data), ENCODING)
+
     if key: # Encrypt data.
         data = encrypt(key, data)
         if poison == "DATA_ENCRYPTED":
