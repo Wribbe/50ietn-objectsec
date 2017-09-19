@@ -13,9 +13,6 @@ PORT = 12000
 HOST = ''
 SIZE_DATA = 1024
 
-TYPE_INITIATE = "INITIATE"
-TYPE_ANSWER = "ANSWER"
-
 CMD_SHAKE = "SHAKE"
 CMD_SHARED = "SHARED"
 
@@ -73,23 +70,6 @@ def get_prime():
         return primes
 
     return random.choice(super_secret_primes())
-
-def handshake(shake_type, socket, address):
-    """ Handshake routine with different types, used for key-exchange:
-        - Initiate -- Send public numbers p, g and g^a mod p to client(s),
-                      return own secret a.
-        - Answer -- Send computation g^y mod p back.
-    """
-    if shake_type == TYPE_INITIATE:
-        p = get_prime() # Public (prime) modulus.
-        g = get_prime() # Public (prime) base.
-        a = get_prime() # Server private key.
-        g_raised_to_a_mod_p = g**a % p
-        send_data(socket, [p, g, g_raised_to_a_mod_p], address)
-        print("Sending p: {}, g: {}, g^mod p: {}".format(p, g,
-            g_raised_to_a_mod_p))
-        print("Keeping {} as own secret.".format(a))
-        return p, g, g_raised_to_a_mod_p, a
 
 def send_data(socket, data, address, key="", poison="",
         poison_message=False):
@@ -166,6 +146,18 @@ def server():
     g_raised_to_a_mod_p = ""
     shared_rsa_secret = ""
 
+    def handshake(socket, address):
+        """ Server handshake routine used for key-exchange. """
+        p = get_prime() # Public (prime) modulus.
+        g = get_prime() # Public (prime) base.
+        a = get_prime() # Server private key.
+        g_raised_to_a_mod_p = g**a % p
+        send_data(socket, [p, g, g_raised_to_a_mod_p], address)
+        print("Sending p: {}, g: {}, g^mod p: {}".format(p, g,
+            g_raised_to_a_mod_p))
+        print("Keeping {} as own secret.".format(a))
+        return p, g, g_raised_to_a_mod_p, a
+
     def parse_commands():
         nonlocal p, g, a, g_raised_to_a_mod_p, shared_rsa_secret
         tokens, address = get_data(s, key=shared_rsa_secret)
@@ -174,7 +166,7 @@ def server():
             # Remove command.
             tokens.pop(0)
             # Get primitives.
-            primitives = handshake(TYPE_INITIATE, s, address)
+            primitives = handshake(s, address)
             # Unpack primitives.
             p, g, g_raised_to_a_mod_p, a = primitives
         elif command == CMD_SHARED:
@@ -187,7 +179,6 @@ def server():
         else: # Message.
             print("Got message: {}".format(tokens))
         print()
-
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.bind((HOST, PORT))
